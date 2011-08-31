@@ -275,6 +275,65 @@ class ASFFormGeneratorUtils {
 		return $text;
 	}
 	
+/*
+	 * Return a link to Special:FormEdit if the the article has to be created eith SF or ASF and False if the
+	 * normal editor should be used
+	 * 
+	 * @param string articleName
+	 * @param array of categorynames for the new instance. (category names without namespace prefixes.)
+	 * 
+	 * @return string link or false
+	 */
+	public static function getCreateNewInstanceLink($articleName, $categories){
+		
+		$store = smwfNewBaseStore();
+
+		//todo: consider namespace when detecting if there is a manually created semantic form
+		
+		$defaultForm = false;
+		$catWithNoNoASFEditFound = false;
+		foreach($categories as $category){
+			$categoryTitle = Title::newFromText($category, NS_CATEGORY);
+
+			$semanticData = $store->getSemanticData($categoryTitle);
+				
+			$defaultForm = ASFFormGeneratorUtils::getPropertyValue(
+				$semanticData, 'Has_default_form');
+				
+			if($defaultForm) break;
+			
+			//Check if ASF has a 'No automatic formedit' annotation
+			if(ASFFormGeneratorUtils::getPropertyValue($semanticData, ASF_PROP_NO_AUTOMATIC_FORMEDIT) != 'true'){
+				$catWithNoNoASFEditFound = true;					
+			}
+		}
+		
+		//Do not use ASF for instances in Category NS
+		$inCategoryNS = false;
+		$nsId = Title::newFromText($articleName)->getNamespace();
+		if($nsId == NS_CATEGORY){
+			$inCategoryNS = true;	
+		}
+		
+		$link = SpecialPage::getPage( 'FormEdit' );
+		$link = $link->getTitle()->getLocalURL();
+		
+		if(strpos($link, '?') > 0) $link .= '&';
+		else $link .= '?';
+		$link .= 'target='.$articleName;
+		
+		if($defaultForm){ //SF
+			$link .= '&form='.$defaultForm;
+		} else if($catWithNoNoASFEditFound && !$inCategoryNS){ //ASF
+			$link .= '&categories=';
+			$link .= urlencode(implode(',', $categories));
+		} else { //Wikitext editor
+			$link = false;
+		}
+		
+		return $link;
+	}
+	
 } 
 
 
