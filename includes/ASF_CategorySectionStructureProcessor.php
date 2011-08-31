@@ -50,8 +50,6 @@ class ASFCategorySectionStructureProcessor {
 		
 		$this->finalizeCategorySectionStructure();
 		
-		echo('<pre>'.print_r($this->categorySectionStructure, true).'</pre>');
-		
 		return array($this->categorySectionStructure, $this->categoriesWithNoProperties, $this->categoriesWithNoFormEdit);
 	}
 	
