@@ -316,7 +316,7 @@ class ASFFormGeneratorUtils {
 		}
 		
 		$link = SpecialPage::getPage( 'FormEdit' );
-		$link = $link->getTitle()->getLocalURL();
+		$link = $link->getTitle()->getFullURL();
 		
 		if(strpos($link, '?') > 0) $link .= '&';
 		else $link .= '?';
