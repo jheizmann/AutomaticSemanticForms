@@ -237,15 +237,27 @@ class ASFParserFunctions {
 				ASFFormGeneratorUtils::getPropertyValue($semanticData, ASF_PROP_HAS_MAX_CARDINALITY);
 			$delimiter = 
 				ASFFormGeneratorUtils::getPropertyValue($semanticData, 'Delimiter');
+			$isUploadable = 
+				ASFFormGeneratorUtils::getPropertyValue($semanticData, ASF_PROP_IS_UPLOADABLE);
 			
+			global $wgContLang;
 			if($maxCardinality != 1 || $delimiter){
 				if(!$delimiter) $delimiter = ',';
 				
 				foreach(explode($delimiter, $value) as $val){
+					
+					if($isUploadable && strpos($val, ':') === false){
+						$val = $wgContLang->getNSText(NS_FILE).':'.$val;
+					}
+					
 					if(strlen(trim($val)) == 0) continue;
 					$result .= '[['.$propertyName.'::'.$val.'| ]]';
 				}
 			} else {
+				if($isUploadable && strpos($value, ':') == false){
+					$value = $wgContLang->getNSText(NS_FILE).':'.$value;
+				}
+				
 				$result .= '[['.$propertyName.'::'.$value.'| ]]';
 			}
 		}
