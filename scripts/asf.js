@@ -128,8 +128,6 @@ var ASFAdmin = {
 	},
 	
 	saveFormCallBack : function(data){
-		alert('---'.JSON.stringify);
-		
 		data = data.substr(data.indexOf('--##startasf##--') + 16, data.indexOf('--##endasf##--') - data.indexOf('--##startasf##--') - 16); 
 		data = JSON.parse(data);
 		
