@@ -103,6 +103,8 @@ class ASFParserFunctions {
 		$result .= '</span>';
 		$result .= '</span>';
 		
+		$result = str_replace(array('&lt;', '&gt;'), array('<', '>'), $result);
+		
 		return $parser->insertStripItem( $result, $parser->mStripState );
 	}
 	
