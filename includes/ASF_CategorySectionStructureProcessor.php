@@ -50,8 +50,6 @@ class ASFCategorySectionStructureProcessor {
 		
 		$this->finalizeCategorySectionStructure();
 		
-		//echo('<pre>'.print_r($this->categorySectionStructure, true).'</pre>');
-		
 		return array($this->categorySectionStructure, $this->categoriesWithNoProperties, $this->categoriesWithNoFormEdit);
 	}
 	
@@ -61,9 +59,6 @@ class ASFCategorySectionStructureProcessor {
 	 * data about parents and children to each category section tree item
 	 */
 	private function initCategorySectionStructure($categories){
-		global $asfPreloadingArticles;
-		$asfPreloadingArticles = array();
-		
 		$this->categorySectionStructure = array();
 		
 		$store = smwfNewBaseStore();
@@ -89,17 +84,11 @@ class ASFCategorySectionStructureProcessor {
 				continue;
 			}
 			
-			//deal with preloading
-			$preloadArticle = ASFFormGeneratorUtils::getPropertyValue($semanticData, ASF_PROP_PRELOAD);
-			if(strlen($preloadArticle) > 0){
-				$asfPreloadingArticles[$preloadArticle] = true;
-			}
-			
 			$categoryTree = ASFFormGeneratorUtils::getSuperCategories($categoryTitle, true);
 			
-			$this->fillCategorySectionStructureWithItems($category, $categoryTree[ucfirst($category)]);
-			
-			//echo('<pre>'.print_r($tree, true).'</pre>');
+			if(array_key_exists(ucfirst($category), $categoryTree)){
+				$this->fillCategorySectionStructureWithItems($category, $categoryTree[ucfirst($category)]);
+			}
 		}
 		
 		//add data about child categories to category section tree structure
@@ -171,7 +160,7 @@ class ASFCategorySectionStructureProcessor {
 			$properties = ASFFormGeneratorUtils::getPropertiesWithDomain(array($title));
 			
 			if(count($properties) == 0 && count($item->children) == 0 && count($item->parents) == 0){
-				unset($this->categorySectionStructure[$categoryName]);
+				//unset($this->categorySectionStructure[$categoryName]);
 				$this->categoriesWithNoProperties[$categoryName] = false;
 			}
 		}
@@ -340,12 +329,16 @@ class ASFCategorySectionStructureProcessor {
 	 * Helper method for addIncludedCategoriesToVisibleSections
 	 * that actually includes the invisible categories
 	 */
-	private function computeIncludedInvisibleCategories($parents, $dependencies = array()){
+	private function computeIncludedInvisibleCategories($parents, $dependencies = null){
 		foreach($parents as $parent => $dontCare){
 			if(!$this->categorySectionStructure[$parent]->visible 
 					&& !$this->categorySectionStructure[$parent]->allreadyIncluded){
 				
-				$this->categorySectionStructure[$parent]->allreadyIncluded = true;
+				if(is_null($dependencies)){
+					$dependencies = array();
+				}
+						
+						$this->categorySectionStructure[$parent]->allreadyIncluded = true;
 				$dependencies[$parent] = true;
 				$parents = $this->categorySectionStructure[$parent]->parents;
 				$dependencies = $this->computeIncludedInvisibleCategories($parents, $dependencies);
@@ -413,7 +406,7 @@ class ASFCategorySectionStructureItem {
 	public $parents = array();
 	public $children = array();
 	public $visible = false; //is section visible in form))
-	public $includesCategories = array(); //which categories are included in this section
+	public $includesCategories = null;//which categories are included in this section
 	public $allreadyIncluded = false; //is this category already included in a section
 	public $visibleDescendantOf = array();
 	

@@ -15,23 +15,31 @@ class ASFCategoryFormData {
 	protected $categorySectionIntro;
 	protected $categorySectionOutro;
 	protected $categorySectionAppendix;
+	protected $preloadArticles;
 	
 	public $noAutomaticFormEdit; 	//value of 'no automatic formedit' property
 	public $useDisplayTemplate; 		//Value of 'use display template' property
 	public $useCSSClass; 					//value of 'use_class' property
 	public $notDisjointWith; 				//value of 'not_disjoint_with' property value
+	protected $usePreloadArticles;
+	protected $usePageNameTemplate;
+	protected $hideFreeText;
+	
+	public $isLeafCategory; //is this one of the original instance annotations
 	
 	
 	
-	public function __construct($categoryTitleObject, $includedCategories = null){
+	public function __construct($categoryTitleObject, $categorySectionStructure){
 		$this->titleObject = $categoryTitleObject;
+		
+		$this->isLeafCategory = count($categorySectionStructure->children) == 0 ? true : false;
 
 		$store = smwfNewBaseStore();
 		$this->semanticData = $store->getSemanticData($this->titleObject);
 		
 		$this->initializeFormCreationMetadata();
 		
-		$this->initializePropertiesFormData($includedCategories);
+		$this->initializePropertiesFormData($categorySectionStructure->includesCategories);
 		
 		$this->sortProperties();
 	}
@@ -70,12 +78,26 @@ class ASFCategoryFormData {
 	private function initializeFormCreationMetadata(){
 		$this->noAutomaticFormEdit = 
 			ASFFormGeneratorUtils::getPropertyValue($this->semanticData, ASF_PROP_NO_AUTOMATIC_FORMEDIT);
-		$this->useDisplayTemplate = 
-			ASFFormGeneratorUtils::getPropertyValue($this->semanticData, ASF_PROP_USE_DISPLAY_TEMPLATE);
 		$this->useCSSClass = 
 			ASFFormGeneratorUtils::getPropertyValue($this->semanticData, ASF_PROP_USE_CLASS);
 		$this->notDisjointWith = 
 			ASFFormGeneratorUtils::getPropertyValue($this->semanticData, ASF_PROP_NOT_DISJOINT_WITH, true);
+			
+		if($this->isLeafCategory){
+			$this->useDisplayTemplate = 
+				ASFFormGeneratorUtils::getInheritedPropertyValue($this->semanticData, ASF_PROP_USE_DISPLAY_TEMPLATE);
+			$this->usePreloadArticles = 
+				ASFFormGeneratorUtils::getInheritedPropertyValue($this->semanticData, ASF_PROP_PRELOAD);
+			$this->usePageNameTemplate = 
+				ASFFormGeneratorUtils::getInheritedPropertyValue($this->semanticData, ASF_PROP_PAGE_NAME_TEMPLATE);
+			$this->hideFreeText = 
+				ASFFormGeneratorUtils::getInheritedPropertyValue($this->semanticData, ASF_PROP_HIDE_FREE_TEXT);
+		} else {
+			$this->useDisplayTemplate = array();
+			$this->usePreloadArticles = array();
+			$this->usePageNameTemplate = array();
+			$this->hideFreeText = array();
+		}
 	}
 	
 	/*
@@ -121,7 +143,7 @@ class ASFCategoryFormData {
 	public function getCategorySectionIntro(){
 		if(!is_null($this->categorySectionIntro)) return $this->categorySectionIntro;
 		
-		if(count($this->propertiesFormData) == 0){
+		if($this->isEmptyCategory()){
 			return '';
 		}
 		
@@ -129,7 +151,8 @@ class ASFCategoryFormData {
 		global $asfDisplayPropertiesAndCategoriesAsLinks;
 		if($asfDisplayPropertiesAndCategoriesAsLinks){
 			$categoryLabel = '{{#qTip:';
-			$categoryLabel .= '[[:'.$this->titleObject->getFullText().'|'.$this->titleObject->getText().']]';
+			$categoryLabel .= ASFFormGeneratorUtils::createParseSaveLink(
+				$this->titleObject->getFullText(), $this->titleObject->getText());
 			$categoryLabel .= '| '.$this->getCategoryTooltip().'}}';
 		} else {
 			$categoryLabel = "<i>".$this->titleObject->getText()."</i>";
@@ -167,7 +190,7 @@ class ASFCategoryFormData {
 	public function getCategorySectionOutro(){
 		if(!is_null($this->categorySectionOutro)) return $this->categorySectionOutro;
 		
-		if(count($this->propertiesFormData) == 0){
+		if($this->isEmptyCategory()){
 			return '';
 		}
 		
@@ -222,27 +245,86 @@ class ASFCategoryFormData {
 	public function getCategorySectionAppendix(){
 		if(!is_null($this->categorySectionAppendix)) return $this->categorySectionAppendix;
 		
-		$appendix = "";
+		$this->categorySectionAppendix = array();
 		
-		if($this->useDisplayTemplate){
-			//todo: Use something better than a global variable here
-			global $asfAllDirectCategoryAnnotations;
-			if(array_key_exists($this->titleObject->getFullText(), $asfAllDirectCategoryAnnotations)){
-				$asfAllDirectCategoryAnnotations[$this->titleObject->getFullText()] = $this->useDisplayTemplate; 
-				$appendix .= "{{{for template| ".$this->useDisplayTemplate."}}} ";
-				$appendix .= '{{{field |categories|hidden}}}';
-				$appendix .= "{{{end template}}}";
-
+		if($this->isLeafCategory){
+			foreach($this->useDisplayTemplate as $displayTemplate){	
+				if(strtolower($displayTemplate) != 'false'){
+					$appendix = "{{{for template| ".$displayTemplate."}}} ";
+					$appendix .= '{{{field |categories|hidden}}}';
+					$appendix .= "{{{end template}}}";
+					
+					$this->categorySectionAppendix[$displayTemplate] 
+						= $appendix;
+				}
 			}
 		}
 
-		$this->categorySectionAppendix = $appendix;
+		return $this->categorySectionAppendix;		
+	}
+	
+	public function getPreloadingArticles(){
+		if(!is_null($this->preloadArticles)) return $this->preloadArticles;
 		
-		return $appendix;		
+		$this->preloadArticles = array();
+		
+		foreach($this->usePreloadArticles as $a){
+			if(strtolower($a) != 'false'){
+				$this->preloadArticles[$a] = true;
+			}
+		}
+		
+		return $this->preloadArticles;
 	}
 	
 	private function getCategoryTooltip(){
 		return wfMsg('asf_tt_intro', $this->titleObject->getFullText());
+	}
+	
+	public function isEmptyCategory(){
+		$isEmpty = true;
+		
+		foreach($this->propertiesFormData as $prop){
+			if(!$prop->isHiddenProperty()) $isEmpty = false;
+			break;
+		}
+		
+		return $isEmpty;
+	}
+	
+	public function getPageNameTemplate(){
+		$isDefaultPageNameTemplate = true;
+		$pageNameTemplate = '';
+		
+		if($this->isLeafCategory){
+			foreach($this->usePageNameTemplate as $template){
+				if(strtolower($template) != 'false'){
+					$isDefaultPageNameTemplate = false;
+					$pageNameTemplate .= ' '.$template;
+				}
+			}
+		
+			if($isDefaultPageNameTemplate){
+				$pageNameTemplate = $this->titleObject->getText();
+			}
+		}
+		
+		$pageNameTemplate = str_replace( 
+			array( '&lt;', '&gt;', '&#160;', '&#x003D;', '&#x0027;', '&#58;', "<br />" ),	
+			array( '<', '>', ' ', '=', "'", ':', "\n" ), 
+			$pageNameTemplate );
+		
+		return array($isDefaultPageNameTemplate, trim($pageNameTemplate));
+	}
+	
+	
+	public function hideFreeText(){
+		foreach($this->hideFreeText as $hide){
+			if(strtolower($hide) == 'true'){
+				return true;
+			}
+		}
+		return false;
 	}
 	
 	

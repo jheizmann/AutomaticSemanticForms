@@ -1,5 +1,6 @@
 <?php
 
+
 /*
  * This class provides some helper methods
  * for the form generation process
@@ -29,6 +30,40 @@ class ASFFormGeneratorUtils {
 		}
 		
 		return $result;
+	}
+	
+/*
+	 * Helper method for initializeFormCreationMetadata
+	 */
+	public static function getInheritedPropertyValue($semanticData, $propertyName, $getAll = false, $values = array()){
+		$properties = $semanticData->getProperties();
+		
+		if(array_key_exists($propertyName, $properties)){
+			$vals = $semanticData->getPropertyValues($properties[$propertyName]);
+			if(!$getAll){
+				$idx = array_keys($vals);
+				$idx = $idx[0];
+				$values[] = $vals[$idx]->getShortWikiText();
+			} else {
+				foreach($vals as $v){
+					$values[] = $v->getShortWikiText();
+				}
+			}
+		} else {
+			$title = $semanticData->getSubject()->getTitle();
+			$superCategories = $title->getParentCategories();
+			if(array_key_exists($title->getFullText(), $superCategories)){
+				unset($superCategories[$title->getFullText()]);
+			}
+			
+			$store = smwfNewBaseStore();
+			foreach($superCategories as $c => $dc){
+				$semanticData = $store->getSemanticData(Title::newFromText($c, NS_CATEGORY));
+				$values = self::getInheritedPropertyValue($semanticData, $propertyName, $getAll, $values);
+			}
+		}
+		
+		return $values;
 	}
 	
 	/*
@@ -70,15 +105,19 @@ class ASFFormGeneratorUtils {
 		}
 		
 		foreach($directSuperCatgeories as $category => $dC){
-			if($asTree){
-				$superCategoryTitles[$categoryTitle->getText()] = 
-					self::getSuperCategories(Title::newFromText($category), $asTree, $superCategoryTitles[$categoryTitle->getText()]);
-			} else {
-				$superCategoryTitles[substr($category, strpos($category, ':') + 1)] =
-					Title::newFromText($category);
-				$superCategoryTitles = self::getSuperCategories(
-					Title::newFromText($category), $asTree, $superCategoryTitles);
-			}
+			
+			//if(!array_key_exists($categoryTitle->getText(), $superCategoryTitles)){
+			
+				if($asTree){
+					$superCategoryTitles[$categoryTitle->getText()] = 
+						self::getSuperCategories(Title::newFromText($category), $asTree, $superCategoryTitles[$categoryTitle->getText()]);
+				} else {
+					$superCategoryTitles[substr($category, strpos($category, ':') + 1)] =
+						Title::newFromText($category);
+					$superCategoryTitles = self::getSuperCategories(
+						Title::newFromText($category), $asTree, $superCategoryTitles);
+				}
+			//}
 		}
 		
 		return $superCategoryTitles;
@@ -89,9 +128,38 @@ class ASFFormGeneratorUtils {
 	 * for this article
 	 */
 	public static function canFormForArticleBeCreated(Title $title, $createInNSCategory = false){
-		list($response, $dC)
-			= ASFFormGenerator::getInstance()->generateFromTitle($title, false, true);
-		return $response;
+		//Do not create forms in NS_Category if not explicitly stated
+		if($title->getNamespace() == NS_CATEGORY && !$createInNSCategory){
+			return false;
+		}
+
+		$categories = $title->getParentCategories();
+		
+		//do not use ASF if the instance has no category annotations
+		if(count($categories) == 0){
+			return false;
+		}
+		
+		//check if there is a category that has no 'no automatic formedit' annotation
+		$store = smwfNewBaseStore();
+		global $wgLang;
+		foreach($categories as $category => $dC){
+			
+			if(strpos($category, $wgLang->getNSText(NS_CATEGORY).':') === 0){
+				$category = substr($category, strpos($category, ":") +1);
+			}
+			$categoryObject = Category::newFromName($category);
+			$categoryTitle = $categoryObject->getTitle();
+			
+			//ASF can be created if there is one category with no 'no automatic formedit' annotation
+			$semanticData = $store->getSemanticData($categoryTitle);
+			if(ASFFormGeneratorUtils::getPropertyValue($semanticData, ASF_PROP_NO_AUTOMATIC_FORMEDIT)!= 'true'){
+				return true;					
+			}
+		}
+			
+		//all categories had a 'no automatic formedit' annotation and the ASF cannot be created
+		return false;
 	}
 	
 	/*
@@ -128,6 +196,7 @@ class ASFFormGeneratorUtils {
 		//Make sure that annotations in SF_NS_FORM are possible
 		$smwgNamespacesWithSemanticLinks[SF_NS_FORM] = true;
 		
+				
 		//create default form annotation text
 		$annotation = '[[';
 		$annotation .= $sfgContLang->m_SpecialProperties[SF_SP_PAGE_HAS_DEFAULT_FORM];
@@ -135,13 +204,14 @@ class ASFFormGeneratorUtils {
 		$annotation .= $asfDummyFormName;
 		$annotation .= '| ]]';
 		
+		$pageNameFormulaDummy = "{{{info| page name=Dummy <unique number>}}}";
+		
 		//check dummy title
 		$dummyTitle = Title::newFromText($asfDummyFormName, SF_NS_FORM);
 		if(!$dummyTitle->exists()){
 			//dummy article must be created
-			
 			$dummyContent = wfMsg('asf_dummy_article_content');
-			$dummyContent .= $annotation;
+			$dummyContent .= $annotation .= $pageNameFormulaDummy;
 			
 			$article = new Article($dummyTitle);
 			$article->doEdit($dummyContent, wfMsg('asf_dummy_article_edit_comment'));
@@ -149,12 +219,19 @@ class ASFFormGeneratorUtils {
 			//check if page has default form annotation is there
 			$rawText = Article::newFromID($dummyTitle->getArticleID())->getRawText();
 			
+			$doRefresh = false;
 			if(strpos($rawText, $annotation) === false){
-				//annotation must be added to dummy article
-				$rawText .= "\n\n".$annotation;
+				$doRefresh = true;
+			} else if (strpos($rawText, $pageNameFormulaDummy)=== false){
+				$doRefresh = true;
+			}
+			
+			if($doRefresh){
+				$dummyContent = wfMsg('asf_dummy_article_content');
+				$dummyContent .= $annotation .= $pageNameFormulaDummy;
 				
 				$article = new Article($dummyTitle);
-				$res = $article->doEdit($dummyContent, wfMsg('asf_dummy_article_edit_comment'));
+				$res = $article->doEdit($dummyContent, wfMsg('asf_dummy_article_edit_comment'));	
 			}
 		}
 	}
@@ -183,6 +260,78 @@ class ASFFormGeneratorUtils {
 		}
 		
 		return $properties;
+	}
+	
+	
+	public static function createParseSaveLink($titleText, $label = ''){
+		$linker = new Linker();
+		$link = $linker->makeLink($titleText, $label);
+		$link = str_replace(array('<', '>'), array('*asf-st-*', '*asf-gt-*'), $link);
+		return $link;
+	}
+	
+	public static function retranslateParseSaveLink($text){
+		$text = str_replace(array('*asf-st-*', '*asf-gt-*'), array('<', '>'), $text);
+		return $text;
+	}
+	
+/*
+	 * Return a link to Special:FormEdit if the the article has to be created eith SF or ASF and False if the
+	 * normal editor should be used
+	 * 
+	 * @param string articleName
+	 * @param array of categorynames for the new instance. (category names without namespace prefixes.)
+	 * 
+	 * @return string link or false
+	 */
+	public static function getCreateNewInstanceLink($articleName, $categories){
+		
+		$store = smwfNewBaseStore();
+
+		//todo: consider namespace when detecting if there is a manually created semantic form
+		
+		$defaultForm = false;
+		$catWithNoNoASFEditFound = false;
+		foreach($categories as $category){
+			$categoryTitle = Title::newFromText($category, NS_CATEGORY);
+
+			$semanticData = $store->getSemanticData($categoryTitle);
+				
+			$defaultForm = ASFFormGeneratorUtils::getPropertyValue(
+				$semanticData, 'Has_default_form');
+				
+			if($defaultForm) break;
+			
+			//Check if ASF has a 'No automatic formedit' annotation
+			if(ASFFormGeneratorUtils::getPropertyValue($semanticData, ASF_PROP_NO_AUTOMATIC_FORMEDIT) != 'true'){
+				$catWithNoNoASFEditFound = true;					
+			}
+		}
+		
+		//Do not use ASF for instances in Category NS
+		$inCategoryNS = false;
+		$nsId = Title::newFromText($articleName)->getNamespace();
+		if($nsId == NS_CATEGORY){
+			$inCategoryNS = true;	
+		}
+		
+		$link = SpecialPage::getPage( 'FormEdit' );
+		$link = $link->getTitle()->getFullURL();
+		
+		if(strpos($link, '?') > 0) $link .= '&';
+		else $link .= '?';
+		$link .= 'target='.$articleName;
+		
+		if($defaultForm){ //SF
+			$link .= '&form='.$defaultForm;
+		} else if($catWithNoNoASFEditFound && !$inCategoryNS){ //ASF
+			$link .= '&categories=';
+			$link .= urlencode(implode(',', $categories));
+		} else { //Wikitext editor
+			$link = false;
+		}
+		
+		return $link;
 	}
 	
 } 

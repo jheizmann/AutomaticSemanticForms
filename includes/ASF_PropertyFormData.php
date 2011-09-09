@@ -29,6 +29,8 @@ class ASFPropertyFormData {
 	public $delimiter; 							//value of  'Delimiter' property
 	public $fieldSequenceNumber; 	//value of  'Field_sequence_number' property
 	public $defaultValue;					//use a default value
+	public $hideProperty;
+	
 	
 	
 	/*
@@ -48,7 +50,6 @@ class ASFPropertyFormData {
 	 * Extracts metadata from the ontology and sets the fields of this form input field
 	 */
 	private function initializeFormCreationMetadata(){
-		
 		$this->objectType = 
 			ASFFormGeneratorUtils::getPropertyValue($this->semanticData, ASF_PROP_HAS_TYPE);
 		$this->autocompletionRange = 
@@ -77,6 +78,8 @@ class ASFPropertyFormData {
 			ASFFormGeneratorUtils::getPropertyValue($this->semanticData, ASF_PROP_FIELD_SEQUENCE_NUMBER);
 		$this->defaultValue = 
 			ASFFormGeneratorUtils::getPropertyValue($this->semanticData, ASF_PROP_DEFAULT_VALUE);
+		$this->hideProperty = 
+			ASFFormGeneratorUtils::getPropertyValue($this->semanticData, ASF_PROP_NO_AUTOMATIC_FORMEDIT, false, false);
 			
 	}
 	
@@ -93,7 +96,7 @@ class ASFPropertyFormData {
 		$syntax .= '|'.$this->titleObject->getText();
 		
 		//deal with input type
-		list($inputType, $size, $rows, $cols, $autocompletion, $values, $extraSyntaxParameters) = 
+		list($inputType, $size, $rows, $cols, $autocompletion, $values) = 
 			$this->getFormFieldInputTypeMetadata();
 			
 			
@@ -128,8 +131,17 @@ class ASFPropertyFormData {
 			$autocompletion = '';
 		}
 		
+		//deal with validator
+		global $asfUseSemanticFormsInputsFeatures;
+		$regexp = '';
+		if($this->validator && class_exists('SFIInputs') && $asfUseSemanticFormsInputsFeatures){
+			$inputType = 'regexp';
+			$regexp = ' |regexp='.$this->validator;
+		}
+		
 		$autocompletion .= '|pasteNS=true';
 		
+			
 		$syntax .= ' |input type='.$inputType;
 		if($size) $syntax .= ' |size='.$size;
 		if($rows) $syntax .= ' |rows='.$rows;
@@ -145,10 +157,8 @@ class ASFPropertyFormData {
 		}
 		
 		//deal with validator
-		global $asfUseSemanticFormsInputsFeatures;
-		if($this->validator && class_exists(SFIInputs) && $asfUseSemanticFormsInputsFeatures){
-			$syntax .= ' |regexp='.$this->validator;
-		}
+		$syntax .= $regexp;
+		
 
 		//deal with CSS classes
 		if($this->cssClass){
@@ -176,9 +186,11 @@ class ASFPropertyFormData {
 			$syntax .= ' |default='.$this->defaultValue;
 		}
 		
-		$syntax .= $extraSyntaxParameters;
-		
 		$syntax .= '}}}';
+		
+		if($this->isWriteProtected()){
+			$syntax .= '<span class="asf-write-protected">wpaaaaaaaaaaaaaaaaaaaaaa</span>';			
+		}
 		
 		//deal with form input help
 		if($this->helpText){
@@ -204,9 +216,9 @@ class ASFPropertyFormData {
 		
 		//add form field label
 		global $asfDisplayPropertiesAndCategoriesAsLinks;
-		
 		if($asfDisplayPropertiesAndCategoriesAsLinks){
-			$intro .= "[[".$this->titleObject->getFullText().'|' . $this->inputLabel . ']]:';
+			$intro .= ASFFormGeneratorUtils::createParseSaveLink(
+				$this->titleObject->getFullText(), $this->inputLabel);
 		} else {
 			$intro .= '<span class="asf_input_label">'.$this->inputLabel . ':</span>';
 		}
@@ -248,10 +260,13 @@ class ASFPropertyFormData {
 	 * form field definition and an outro
 	 */
 	public function getFormFieldRow(){
+		if(strtolower($this->hideProperty) == 'true'){
+			return '';
+		}
+		
 		$formFieldRow = $this->getFormFieldIntro();
 		$formFieldRow .= $this->getFormFieldSyntax();
 		$formFieldRow .= $this->getFormFieldOutro();
-		
 		return $formFieldRow;
 	}
 	
@@ -287,24 +302,15 @@ class ASFPropertyFormData {
 		$cols = false;
 		$autocompletion = false;
 		$values = false;
-		$extraSyntaxParameters = '';
 		
 		if($this->explicitInputType){
-			
-			global $dapi_instantiations;
-			if(array_key_exists(ucfirst($this->explicitInputType), $dapi_instantiations)){
-				$inputType = 'datapicker';
-				$extraSyntaxParameters = '|datapicker id='.ucfirst($this->explicitInputType);
-				$size = '6';
-			} else {
-				$inputType = strtolower($this->explicitInputType);
-				$objectType = '-'.strtolower($this->objectType).'-';
-				if(strpos(LONGTEXTDATATYPES, $objectType) !== false
-						|| strpos(SHORTTEXTDATATYPES, $objectType) !== false){
-					$autocompletion = 'values';
-				} else{
-					$autocompletion = 'category';
-				}#
+			$inputType = strtolower($this->explicitInputType);
+			$objectType = '-'.strtolower($this->objectType).'-';
+			if(strpos(LONGTEXTDATATYPES, $objectType) !== false
+					|| strpos(SHORTTEXTDATATYPES, $objectType) !== false){
+				$autocompletion = 'values';
+			} else{
+				$autocompletion = 'category';
 			}
 		} else {
 			$objectType = '-'.strtolower($this->objectType).'-';
@@ -347,7 +353,7 @@ class ASFPropertyFormData {
 		if($forToolTip){
 			return $autocompletion;	
 		} else {
-			return array($inputType, $size, $rows, $cols, $autocompletion, $values, $extraSyntaxParameters);
+			return array($inputType, $size, $rows, $cols, $autocompletion, $values);
 		}
 	}
 	
@@ -387,9 +393,30 @@ class ASFPropertyFormData {
 		return $result;
 	}
 	
+	public function isHiddenProperty(){
+		return strtolower($this->hideProperty) == 'true' ? true : false;	
+	}
 	
-	
-	
-	
+	protected function isWriteProtected(){
+		if(defined('HACL_HALOACL_VERSION')){
+			
+			global $wgUser;
+				
+			$propertyId = $this->titleObject->getArticleID();
+				 	
+			$isWriteProtected = !HACLEvaluator::hasPropertyRight($propertyId, 
+				$wgUser->getId(), HACLRight::CREATE);
+						
+			$isEditProtected = !HACLEvaluator::hasPropertyRight($propertyId, 
+				$wgUser->getId(), HACLRight::EDIT);
+
+			if($isWriteProtected || $isEditProtected){
+			return true;
+		}
+		
+		return false;
+		}
+	}
+
 	
 }

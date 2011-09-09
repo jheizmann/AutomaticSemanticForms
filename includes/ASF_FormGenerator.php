@@ -15,13 +15,15 @@ define('ASF_PROP_USE_CLASS', 'Use_class');
 define('ASF_PROP_DELIMITER', 'Delimiter');
 define('ASF_PROP_FIELD_SEQUENCE_NUMBER', 'Field_sequence_number');
 define('ASF_PROP_DEFAULT_VALUE', 'Default_value');
-define('ASF_PROP_PRELOAD', 'Use_preload_article');
 
 //define form metadata properties for categories
 define('ASF_PROP_NO_AUTOMATIC_FORMEDIT', 'No_automatic_formedit');
 define('ASF_PROP_USE_DISPLAY_TEMPLATE', 'Use_display_template');
 //define('ASF_PROP_USE_CLASS', 'Use_class');
 define('ASF_PROP_NOT_DISJOINT_WITH', 'Not_disjoint_with');
+define('ASF_PROP_PRELOAD', 'Use_preload_article');
+define('ASF_PROP_PAGE_NAME_TEMPLATE', 'Use_page_name_template');
+define('ASF_PROP_HIDE_FREE_TEXT', 'Hide_free_text');
 
 //define dtata type form input type relations
 define('TEXTDATATYPES', '-page- ');
@@ -39,12 +41,12 @@ define('ASF_TEXTAREA_COLS', '78');
 
 
 /*
- * Automatically generates Semantic Forms based on the current ontology 
+ * Automatically generates Semantic Forms based on the current ontology
  */
 class ASFFormGenerator {
 
 	private static $formGenerator = null;
-	
+
 	/*
 	 * Singleton
 	 */
@@ -54,125 +56,148 @@ class ASFFormGenerator {
 		}
 		return self::$formGenerator;
 	}
-	
+
 	/*
 	 * Generates a Semantic Form based on a given
 	 * title object and its category annotations
 	 */
-	public function generateFromTitle(Title $title, $createInNSCategory = false, $justCheck = false){
+	public function generateFromTitle(Title $title, $createInNSCategory = false){
 		$categories = $title->getParentCategories();
-		
+
 		//Do not create forms in NS_Category if not explicitly stated
 		if($title->getNamespace() == NS_CATEGORY && !$createInNSCategory){
 			return false;
 		}
-		
-		return $this->generateFormForCategories(array_keys($categories), $title, $justCheck);
+
+		return $this->generateFormForCategories(array_keys($categories), $title);
 	}
-	
+
 	/*
 	 * Generate form for an instance based on some given category names
 	 */
-	public function generateFormForCategories($categories, $instanceTitle = null, $justCheck = false){
-		
+	public function generateFormForCategories($categories, $instanceTitle = null){
+
 		//check if an automatic form can be created
 		if(count($categories) == 0) return false;
-		
+
 		//eliminate categories that are super-categories of another annotated category
 		$categories = $this->removeSuperCategories(array_flip($categories));
-		
+
 		list($categories, $categoriesWithNoProperties, $categoriesWithNoFormEdit)
 			= $this->initializeCategoryFormData($categories);
-		
-		if(count($categories) == 0 && count($categoriesWithNoProperties) == 0) 
+
+		if(count($categories) == 0 && count($categoriesWithNoProperties) == 0)
 			return array(false, $categoriesWithNoFormEdit);
-		
-		if($justCheck) 
-			return array(true, $categoriesWithNoFormEdit);
-		
+
 		if(!is_null($instanceTitle)){
-			$unresolvedAnnotationsSection = 
-				new ASFUnresolvedAnnotationsFormData($instanceTitle, $categories);
-			
+			$unresolvedAnnotationsSection =
+			new ASFUnresolvedAnnotationsFormData($instanceTitle, $categories);
+
 			$categories[] = $unresolvedAnnotationsSection;
-		}	
+		}
 			
 		//deal with duplicate properties
 		$formDefinition = $this->getFormDefinition($categories, $categoriesWithNoProperties);
+
+		//deal with preloading
+		//todo: use s.th. better than a gloabal variable
+		global $asfPreloadingArticles;
+		$asfPreloadingArticles = array();
+		foreach($categories as $c){
+			$asfPreloadingArticles = array_merge($asfPreloadingArticles, $c->getPreloadingArticles());
+		}
+
+		$this->computePageNameTemplate($categories);
 		
 		//echo('<pre>'.print_r($formDefinition, true).'</pre>');
-		
-		//$this->addJavaScriptFiles();
-		
+
 		return array($formDefinition, $categoriesWithNoFormEdit);
 	}
 	
 	
-	/*
-	 * 
-	 */
-	private function initializeCategoryFormData($categories){
-		//todo: Use something better than a global variable here
-		global $asfAllDirectCategoryAnnotations;
-		$asfAllDirectCategoryAnnotations = array();
-		
-		global $asfDoEnhancedCategorySectionProcessing;
-		if($asfDoEnhancedCategorySectionProcessing){
-			//let the category section structure processor compute which
-			//sections to create
-			list($categorySections, $categoriesWithNoProperties, $categoriesWithNoFormEdit) = 
-				ASFCategorySectionStructureProcessor::getInstance()->getCategorySectionStructure($categories);
-			
-			if(!$categorySections) 
-				return array(array(), $categoriesWithNoProperties, $categoriesWithNoFormEdit);
-
-			$categories = array();
-			foreach($categorySections as $categoryName => $categorySection){
-				$categoryTitle = Category::newFromName($categoryName)->getTitle();
-				
-				 $categoryFormDataObject =
-					new ASFCategoryFormData($categoryTitle, $categorySection->includesCategories);
-				
-				//Make sure that display templates of not directly annotated
-				//categories will not be shown
-				if(count($categorySection->children) == 0){
-					$asfAllDirectCategoryAnnotations[$categoryTitle->getFullText()] = false; 
-				}  
-				
-				$categories[] = $categoryFormDataObject;
-			}	
-		} else {
-			//this is not supported in this mode
-			$categoriesWithNoProperties = array();
-			$categoriesWithNoFormEdit = array();
-			
-			//create section for each category annotation and then deal with duplicate properties
-			global $wgLang;
-			foreach($categories as $key => $category){
-				if(strpos($category, $wgLang->getNSText(NS_CATEGORY).":") === 0){
-					$category = substr($category, strpos($category, ":") +1);
+	private function computePageNameTemplate($categories){
+		//todo: use s.th. better than a gloabal variable
+		global $asfPageNameTemplate;	
+		$asfPageNameTemplate = '';
+		$useDefaultTemplate = true;
+		foreach($categories as $c){
+			list($isDefault, $template) = $c->getPageNameTemplate();
+			if($isDefault){
+				if($useDefaultTemplate){
+					if(strlen($template) > 0){
+						$asfPageNameTemplate .= ' '.$template;
+					}			
 				}
-				
-				$category = Category::newFromName($category);
-				$categories[$key] = new ASFCategoryFormData($category->getTitle());
-				$asfAllDirectCategoryAnnotations[$category->getTitle()->getFullText()] = false;
+			} else {
+				if($useDefaultTemplate){
+					$asfPageNameTemplate = '';
+				}
+				if(strlen($template) > 0){
+					$asfPageNameTemplate .= ' '.$template;
+				}
+				$useDefaultTemplate = false;
 			}
-			$categories = $this->dealWithDuplicateProperties($categories);
 		}
 		
+		$asfPageNameTemplate = trim($asfPageNameTemplate);
+		if($useDefaultTemplate || strlen($asfPageNameTemplate) == 0){
+			$asfPageNameTemplate = trim($asfPageNameTemplate.'<unique number>');			
+		} else {
+			$addUniqueNumber = false;
+			if(strpos($asfPageNameTemplate, '<unique number>') !== false){
+				$addUniqueNumber = true;
+				$asfPageNameTemplate = str_replace(
+					'<unique number>', '', $asfPageNameTemplate);	
+			}
+			
+			$asfPageNameTemplate = str_replace(
+				array('<', '>'), array('<CreateSilentAnnotations:[', ']>'), $asfPageNameTemplate);
+
+			if($addUniqueNumber){
+				$asfPageNameTemplate = trim($asfPageNameTemplate).' <unique number>';
+			}
+		}
+	}
+
+
+	/*
+	 *
+	 */
+	private function initializeCategoryFormData($categories){
+		
+		list($categorySections, $categoriesWithNoProperties, $categoriesWithNoFormEdit) =
+			ASFCategorySectionStructureProcessor::getInstance()->getCategorySectionStructure($categories);
+
+		if(!$categorySections)
+			return array(array(), $categoriesWithNoProperties, $categoriesWithNoFormEdit);
+
+		$categories = array();
+		foreach($categorySections as $categoryName => $categorySection){
+			$categoryTitle = Category::newFromName($categoryName)->getTitle();
+
+			$categoryFormDataObject =
+				new ASFCategoryFormData($categoryTitle, $categorySection);
+
+			$categories[] = $categoryFormDataObject;
+			
+			if($categoryFormDataObject->isEmptyCategory()){
+				$categoriesWithNoProperties[$categoryName] = false;
+			}
+		}
+			
 		return array($categories, $categoriesWithNoProperties, $categoriesWithNoFormEdit);
 	}
-	
-	
+
+
 	/*
-	 * Removes categories that are super categories of others in 
+	 * Removes categories that are super categories of others in
 	 * the given category array
 	 */
 	private function removeSuperCategories($categories){
 		global $wgLang;
-		
+
 		$categories = array_keys($categories);
-		
+
 		$categoryHierarchies = array();
 		foreach($categories as $category){
 			if(strpos($category, $wgLang->getNSText(NS_CATEGORY).':') === 0){
@@ -182,7 +207,7 @@ class ASFFormGenerator {
 			$categoryObject = Category::newFromName($category);
 			$categoryHierarchies[$category] = ASFFormGeneratorUtils::getSuperCategories($categoryObject->getTitle());
 		}
-		
+
 		foreach($categoryHierarchies as $category => $superCategories){
 			foreach(array_keys($superCategories) as $superCategory){
 				if(array_key_exists($superCategory, $categoryHierarchies)){
@@ -190,15 +215,15 @@ class ASFFormGenerator {
 				}
 			}
 		}
-		
+
 		$categories = array_keys($categoryHierarchies);
-		
+
 		//echo('<pre>'.print_r($categories, true).'</pre>');
-		
+
 		return $categories;
 	}
-	
-	
+
+
 	/*
 	 * Returns the form definition
 	 */
@@ -206,94 +231,120 @@ class ASFFormGenerator {
 		$formDefinition = $this->getFormDefinitionIntro($categories);
 		$formDefinition .= $this->getFormDefinitionSyntax($categories);
 		$formDefinition .= $this->getFormDefinitionOutro($categories, $categoriesWithNoProperties);
-		
+
 		return $formDefinition;
 	}
-	
+
 	/*
 	 * Returns the intro of this form definition
 	 */
 	private function getFormDefinitionIntro($categories){
-		
+
 		$intro = "{{{info|add title=Add|edit title=Edit";
-		
+
 		global $asfWYSIWYG;
 		if(defined('WYSIWYG_EDITOR_VERSION')){
 			$intro .= "|WYSIWYG";
 		}
-		
+
 		$intro .= "}}}\n\n";
-		
-		
+
+
 		$intro .= "{{{for template| CreateSilentAnnotations:";
 		$intro .= "}}}\n\r";
-		
+
 		return $intro;
 	}
-	
-/*
+
+	/*
 	 * Returns the syntax of this form definition
 	 */
 	private function getFormDefinitionSyntax($categories){
 		$formDefinitionSyntax = "";
-		
+
 		foreach($categories as $categoty){
 			$formDefinitionSyntax .= $categoty->getCategorySection();
 		}
-		
+
 		return $formDefinitionSyntax;
 	}
-	
-/*
+
+	/*
 	 * Returns the outro of this form definition
 	 */
 	private function getFormDefinitionOutro($categories, $categoriesWithNoProperties){
 		$outro = "\n\n{{{end template}}}";
-		
+
+		$appendix = array();
 		foreach($categories as $categoty){
-			$outro .= $categoty->getCategorySectionAppendix();
+			$appendix = array_merge($appendix, $categoty->getCategorySectionAppendix());
 		}
-		
+		foreach($appendix as $a){
+			$outro .= $a;
+		}
+
 		$outro .=  $this->handleCategoriesWithNoProperties($categoriesWithNoProperties);
+
 		
-		$outro .= "'''".wfMsg('asf_free_text')."'''\n";
-		
+
 		global $wgUser;
 		$cols = $wgUser->getIntOption('cols');
 		$rows = $wgUser->getIntOption('rows');
+
+		$showFreeText = true;
+		foreach($categories as $c){
+			if($c->hideFreeText()){
+				$showFreeText = false;
+				break;
+			}
+		}
 		
-		$outro .= "{{{standard input|free text|rows=".$rows."|cols=".$cols."}}}";
+		if($showFreeText){
+			//$outro .= "'''".wfMsg('asf_free_text')."'''\n";			
+			$outro .= "{{{standard input|free text|rows=".$rows."|cols=".$cols."}}}";
+		} else {
+			$outro .= "{{{standard input|free text|rows=".$rows."|cols=".$cols."}}}";
+			$outro .= '<span class="asf-hide-freetext"/>';
+		}
 		
+		$outro .= '<br/><br/>{{{standard input|summary}}}';
+		$outro .= '<br/>{{{standard input|minor edit}}} {{{standard input|watch}}}';
+		$outro .= '<br/>{{{standard input|save}}} {{{standard input|preview}}} {{{standard input|changes}}} {{{standard input|cancel}}}';
 		$outro .= wfMsg('asf_autogenerated_msg');
-		
+
 		return $outro;
 	}
-	
-	
+
+
 	/*
 	 * get syntax for section with invalid categories
 	 */
 	private function handleCategoriesWithNoProperties($categoriesWithNoProperties){
 		$syntax = '';
-		
+
 		if(count($categoriesWithNoProperties) > 0){
 			$syntax .= "\n{{#collapsableFieldSetStart:";
-		
+
 			$syntax .= wfMsg('asf_categories_with_no_props_section')."| true}}\n";
-			
+				
 			$syntax .= '<ul>';
+			global $wgLang, $asfDisplayPropertiesAndCategoriesAsLinks;
 			foreach($categoriesWithNoProperties as $c => $dc){
-				global $wgLang;
-				$syntax .= '<li>[[:'.$wgLang->getNSText(NS_CATEGORY).':'.$c.'|'.$c.']]</li>';
+				if($asfDisplayPropertiesAndCategoriesAsLinks){
+					$link = ASFFormGeneratorUtils::createParseSaveLink($wgLang->getNSText(NS_CATEGORY).':'.$c, $c);
+					$syntax .= '<li>'.$link.'</li>';
+				} else {
+					$syntax .= '<li>'.$c.'</li>';
+				}
 			}
 			$syntax .= '</ul>';
-			
+				
 			$syntax .= "\n{{#collapsableFieldSetEnd:}}";
 		}
-		
+
 		return $syntax;
 	}
-	
+
 	/*
 	 * If the category section structure processor is not used, then it is
 	 * possible, that different sections want to define the same
@@ -305,35 +356,34 @@ class ASFFormGenerator {
 				foreach($categories[$k]->propertiesFormData as $propName => $dontCare){
 					if(array_key_exists($propName, $categories[$i]->propertiesFormData)){
 						$categories[$i]->propertiesFormData[$propName]
-							->setFormFieldSyntax(wfMsg("asf_duplicate_property_placeholder"));
+						->setFormFieldSyntax(wfMsg("asf_duplicate_property_placeholder"));
 					}
 				}
 			}
 		}
-		
+
 		return $categories;
 	}
-	
+
 	/*
 	 * Adds the javascript libraries, which are required by
 	 * the Automatic Semantic Forms extension
 	 */
 	private function addJavascriptFiles(){
 		// Tell the script manager, that we need jQuery
-		global $smgJSLibs; 
-		$smgJSLibs[] = 'jquery'; 
+		global $smgJSLibs;
+		$smgJSLibs[] = 'jquery';
 		$smgJSLibs[] = 'qtip';
-		
+
 		global $wgOut, $asfScriptPath;
 		$scriptFile = $asfScriptPath . "/scripts/automatic_semantic_forms.js";
-		$wgOut->addScriptFile( $scriptFile );	
+		$wgOut->addScriptFile( $scriptFile );
 	}
-	
+
 }
 
 
 
 
 
-	
-	
+

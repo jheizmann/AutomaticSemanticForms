@@ -33,9 +33,9 @@ var ASFAdmin = {
 			data: {
 				'action' : 'ajax',
 				'rs' : 'asff_getFormPreview',
-				'rsargs[]' : [categories],
+				'rsargs[]' : [categories]
 			},
-			success: ASFAdmin.refreshTabsCallBack,
+			success: ASFAdmin.refreshTabsCallBack
 		});
 	},
 	
@@ -121,9 +121,9 @@ var ASFAdmin = {
 			data: {
 				'action' : 'ajax',
 				'rs' : 'asff_saveForm',
-				'rsargs[]' : [formName, formDefinition],
+				'rsargs[]' : [formName, formDefinition]
 			},
-			success: ASFAdmin.saveFormCallBack,
+			success: ASFAdmin.saveFormCallBack
 		});
 	},
 	
@@ -165,9 +165,9 @@ var ASFAdmin = {
 				data: {
 					'action' : 'ajax',
 					'rs' : 'asff_checkFormName',
-					'rsargs[]' : [formName],
+					'rsargs[]' : [formName]
 				},
-				success: ASFAdmin.checkFormNameCallBack,
+				success: ASFAdmin.checkFormNameCallBack
 			});
 		}
 	},
@@ -195,6 +195,7 @@ function initializeNiceASFTooltips(){
 	
 	//do form input label ttoltips
 	$('.asf_use_qtip').each( function () {
+	
 		var ttContent = $('.asf_qtip_content', this).html();
 		
 		if(ttContent.length > 0){
@@ -236,7 +237,7 @@ function initializeNiceASFTooltips(){
  * hide a form section 
  */
 function asf_hide_category_section(id){
-	jQuery('#' + id + ' .asf_visible_legend').hide();
+	jQuery('#' + id + '  .asf_visible_legend').hide();
 	jQuery('#' + id + ' .asf_collapsed_legend').show();
 	jQuery('#' + id + ' .asf_fieldset_content').hide();
 	//jQuery('#' + id + '_hidden legend').focus();
@@ -260,11 +261,6 @@ function asf_hit_category_section(id){
 	}
 }
 
-//initialize tooltips
-window.onload = initializeNiceASFTooltips;
-
-
-
 function asf_initializeCollapsableSectionsTabIndexes(){
 	jQuery(".asf_legend").each( function(){
 		var tabindex = jQuery("input[tabindex]", jQuery(this).parent()).attr('tabindex');
@@ -274,6 +270,30 @@ function asf_initializeCollapsableSectionsTabIndexes(){
 	});
 }
 
+function asf_hideFreeText(){
+	if(jQuery('.asf-hide-freetext').get().length > 0){
+		wgHideSemanticToolbar = true;
+		jQuery('#free_text').css('display', 'none');
+	}
+}
+
+
+function asf_makeReadOnly(){
+jQuery('.asf-write-protected').parent().each( function (){
+		jQuery('*', this).attr('readonly', 'true');
+		jQuery('*', this).attr('disabled', 'true');
+	});
+}
+
+
+jQuery(document).ready( function($) {
+	initializeNiceASFTooltips();
+	asf_hideFreeText();	
+	asf_makeReadOnly();
+	
+});
+
 window.onload = asf_initializeCollapsableSectionsTabIndexes;
+
 
 

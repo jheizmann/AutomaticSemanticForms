@@ -85,6 +85,10 @@ class ASFUnresolvedAnnotationsFormData extends ASFCategoryFormData {
 			return '';
 		}
 		
+		if($this->isEmptyCategory()){
+			return '';
+		}
+		
 		//create collapsed version of section
 		$intro = "\n{{#collapsableFieldSetStart:";
 		$intro .= wfMsg('asf_unresolved_annotations');
@@ -123,6 +127,18 @@ class ASFUnresolvedAnnotationsFormData extends ASFCategoryFormData {
 				$this->propertiesFormData[$name]->explicitInputType = "text";
 			}
 		}
+	}
+	
+	public function getPreloadingArticles(){
+		return array();		
+	}
+	
+	public function getPageNameTemplate(){
+		return array(true, '');
+	}
+	
+	public function hideFreeText(){
+		return false;
 	}
 	
 }

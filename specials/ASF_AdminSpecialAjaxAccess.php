@@ -18,7 +18,7 @@ function asff_getFormPreview($categories){
 	$categories = explode(';', $categories);
 
 	list($formDefinition, $dontCare) = ASFFormGenerator::getInstance()
-	->generateFormForCategories($categories);
+		->generateFormForCategories($categories);
 
 	if($formDefinition){
 		global $asfDummyFormName;
@@ -62,6 +62,8 @@ function asff_getFormPreview($categories){
 		$skins = '';
 	}
 
+	$formDefinition = ASFFormGeneratorUtils::retranslateParseSaveLink($formDefinition);
+	
 	$response = array('preview' => $formHTML, 'source' => $formDefinition, 'skins' => $skins, 'success' => $success);
 	$response = json_encode($response);
 	$response = '--##startasf##--'.$response.'--##endasf##--';

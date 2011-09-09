@@ -103,6 +103,8 @@ class ASFParserFunctions {
 		$result .= '</span>';
 		$result .= '</span>';
 		
+		$result = str_replace(array('&lt;', '&gt;'), array('<', '>'), $result);
+		
 		return $parser->insertStripItem( $result, $parser->mStripState );
 	}
 	
@@ -237,15 +239,27 @@ class ASFParserFunctions {
 				ASFFormGeneratorUtils::getPropertyValue($semanticData, ASF_PROP_HAS_MAX_CARDINALITY);
 			$delimiter = 
 				ASFFormGeneratorUtils::getPropertyValue($semanticData, 'Delimiter');
+			$isUploadable = 
+				ASFFormGeneratorUtils::getPropertyValue($semanticData, ASF_PROP_IS_UPLOADABLE);
 			
+			global $wgContLang;
 			if($maxCardinality != 1 || $delimiter){
 				if(!$delimiter) $delimiter = ',';
 				
 				foreach(explode($delimiter, $value) as $val){
+					
+					if($isUploadable && strpos($val, ':') === false){
+						$val = $wgContLang->getNSText(NS_FILE).':'.$val;
+					}
+					
 					if(strlen(trim($val)) == 0) continue;
 					$result .= '[['.$propertyName.'::'.$val.'| ]]';
 				}
 			} else {
+				if($isUploadable && strpos($value, ':') == false){
+					$value = $wgContLang->getNSText(NS_FILE).':'.$value;
+				}
+				
 				$result .= '[['.$propertyName.'::'.$value.'| ]]';
 			}
 		}
@@ -580,13 +594,24 @@ class ASFParserFunctions {
 			$queryString = str_replace( '&amp;', '%26', $queryString);
 			$queryComponents = explode( '&', $queryString);
 			foreach ( $queryComponents as $queryComponent ) {
-				$queryComponent = urldecode( $queryComponent );
+				$queryComponent = urldecode($queryComponent);
+				
 				if(strpos($queryComponent, 'Property[') === 0){
 					$queryComponent = 'CreateSilentAnnotations:[' . substr($queryComponent, strlen('Property['));
 				}
-				$varAndVal = explode( '=', $queryComponent );
+				
+				$varAndVal = explode( '=', $queryComponent, 2);
 				if ( count($varAndVal) == 2){
-					$str .= '<input type="hidden" name="' . $varAndVal[0] . '" value="' . $varAndVal[1] . '" /> ';
+					//$str .= '<input type="hidden" name="' . $varAndVal[0] . '" value="' . $varAndVal[1] . '" /> ';
+					
+					$str .= Xml::element( 'input',
+						array(
+							'type' => 'hidden',
+							'name' => $varAndVal[0],
+							'value' => $varAndVal[1],
+						)
+					) . "";
+			
 				}
 			}
 		}
