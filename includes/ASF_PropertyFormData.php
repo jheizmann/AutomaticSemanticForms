@@ -305,6 +305,9 @@ class ASFPropertyFormData {
 		
 		if($this->explicitInputType){
 			$inputType = strtolower($this->explicitInputType);
+			if($inputType == 'datepicker' || $inputType == 'datetimepicker'){
+				$size = '';
+			}
 			$objectType = '-'.strtolower($this->objectType).'-';
 			if(strpos(LONGTEXTDATATYPES, $objectType) !== false
 					|| strpos(SHORTTEXTDATATYPES, $objectType) !== false){
@@ -329,7 +332,7 @@ class ASFPropertyFormData {
 			} else if(strpos(DATETIMEDATATYPES, $objectType) !== false){
 				global $asfUseSemanticFormsInputsFeatures;
 				if(class_exists('SFIInputs') && $asfUseSemanticFormsInputsFeatures){
-					$inputType = 'datepicker';
+					$inputType = 'datetimepicker';
 					$size = '';
 				} else {
 					$inputType = 'datetime';
