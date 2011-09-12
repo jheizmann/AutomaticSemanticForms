@@ -34,8 +34,8 @@ class ASFCategoryAC {
 		
 		$textTitles = array_unique($textTitles);
 		$titles = array();
-		foreach($textTitles as $r) {
-			$titles[] = TSHelper::getTitleFromURI($r, true);
+		foreach($textTitles as $t) {
+			$titles[] = Title::newFromText($t);
 		}
 		
 		return $titles;
