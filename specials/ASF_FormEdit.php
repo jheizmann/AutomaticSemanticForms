@@ -31,7 +31,10 @@ function execute($query) {
 			}
 		}
 		
-		$categoryParam = str_replace('--asf-slash-slash--', '/', $categoryParam);
+		if(!is_null($categoryParam)){
+			$categoryParam = str_replace('--asf-slash-slash--', '/', $categoryParam);
+		}
+		
 		$targetName = str_replace('--asf-slash-slash--', '/', $targetName);
 		
 		$formName = $wgRequest->getVal('form');
