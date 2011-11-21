@@ -2,7 +2,7 @@
 <deploydescriptor>
 	<global>
 		<version>120</version>
-		<patchlevel>7</patchlevel>
+		<patchlevel>8</patchlevel>
 		<id>automaticsemanticforms</id>
 		<vendor>ontoprise GmbH</vendor>
 		<maintainer>ontoprise GmbH</maintainer>
