@@ -98,7 +98,7 @@ class ASFFormEdit extends SFFormEdit {
 			//The given instance will be edited with forms for the given categories
 			
 			//first deal with preloading form input fields
-			if(is_array($wgRequest->getArray('Property', null))){
+			if(!$wgRequest->wasPosted() && is_array($wgRequest->getArray('Property', null))){
 				$wgRequest->setVal('CreateSilentAnnotations:', $wgRequest->getArray('Property', null));
 			}
 			
